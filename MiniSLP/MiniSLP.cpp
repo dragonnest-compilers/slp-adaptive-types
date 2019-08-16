@@ -301,6 +301,7 @@ struct MiniSLP : public FunctionPass {
     auto *vectorTy = VectorType::get(isoTree->biggestType, isoTree->vectorWidth);
     std::vector<Value*> vecOperands;
     std::vector<Value*> instVec;
+    std::vector<Instruction*> delInsts;
     std::vector<Node *> lastNodes = isoTree->getLastVectorizableNodes();
 
 	  //Para cada ultimo node
@@ -341,20 +342,24 @@ struct MiniSLP : public FunctionPass {
 
 
       //Atualiza a sub arvore do node folha
-      updateSubTree(isoTree, node, lastInst);
+      updateSubTree(isoTree, node, lastInst, delInsts);
+
+      // Remove as instruções não usadas
+      for(Instruction* i : delInsts){
+        i->eraseFromParent();
+      }
     }
   }
-  void updateSubTree(IsoTree* isoTree, Node* node, Instruction* lastInst){
+  void updateSubTree(IsoTree* isoTree, Node* node, Instruction* lastInst, std::vector<Instruction*> delInsts){
     auto *vectorTy = VectorType::get(isoTree->biggestType, isoTree->vectorWidth);
     //Se o nó é apontado pelo Store
     if(node->isPointedByNode == isoTree->seedNode){
-      StoreInst* firstStore = dyn_cast<StoreInst>(node->isPointedByNode->ScalarInstructions[0]);
       Node* nodePrevious = node->isPointedByNode;
 
       //Remove as instruções não usadas mais no node
       for(unsigned i = 0; i < node->ScalarInstructions.size() - 1; i++){
         Instruction* del = dyn_cast<Instruction>(node->ScalarInstructions[i]);
-        del->eraseFromParent();
+        delInsts.push_back(del);
       }
       //Atualiza o operando dos stores
       IRBuilder<> builder(lastInst->getNextNode());
@@ -390,10 +395,10 @@ struct MiniSLP : public FunctionPass {
       //Remove as instruções não usadas mais no node
       for(unsigned i = 0; i < node->ScalarInstructions.size() - 1; i++){
         Instruction* del = dyn_cast<Instruction>(node->ScalarInstructions[i]);
-        del->eraseFromParent();
+        delInsts.push_back(del);
       }
 
-      updateSubTree(isoTree, nodePrevious, newLastInst);
+      updateSubTree(isoTree, nodePrevious, newLastInst, delInsts);
     }
   }
   /**
